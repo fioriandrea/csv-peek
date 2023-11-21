@@ -52,7 +52,6 @@ func main() {
 	flag.Parse()
 
 	if csvFile == "" {
-		fmt.Fprintln(os.Stderr, "Error: Please provide the path to the CSV file using -file flag.")
 		flag.Usage()
 		os.Exit(1)
 	}
