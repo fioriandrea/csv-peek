@@ -13,8 +13,8 @@ go install github.com/fioriandrea/csv-peek@latest
 - Arrow keys: Navigate up, down, left, and right.
 - `j`: Move forward one line.
 - `k`: Move backward one line.
-- `l`: Move one character to the right.
-- `h`: Move one character to the left.
+- `l`: Move one cell to the right.
+- `h`: Move one cell to the left.
 - `Ctrl+N`: Move forward by a page.
 - `Ctrl+P`: Move backward by a page.
 - `Space`: Move forward by half a page.
