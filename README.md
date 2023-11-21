@@ -2,6 +2,12 @@
 
 csv-peek is a lightweight CSV file viewer for the command line, designed to simplify exploration and navigation of CSV data.
 
+## Installation
+
+```
+go install github.com/fioriandrea/csv-peek@latest
+```
+
 ## Keyboard Shortcuts
 
 - Arrow keys: Navigate up, down, left, and right.
