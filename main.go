@@ -33,11 +33,11 @@ var (
 
 type Pager struct {
 	sync.Mutex
-	currentOffset   int64
-	horizontalShift int
-	maxFields       int
-	maxWidth        int
-	file            *os.File
+	currentOffset      int64
+	horizontalShift    int
+	maxWidth           []int
+	file               *os.File
+	prevPrintableLines []string
 }
 
 var (
@@ -196,10 +196,12 @@ func (p *Pager) readLines() [][]string {
 			}
 			log.Fatalln(err)
 		}
-		p.maxFields = max(p.maxFields, len(record))
-		for _, field := range record {
+		for len(record) > len(p.maxWidth) {
+			p.maxWidth = append(p.maxWidth, 0)
+		}
+		for f, field := range record {
 			n := utf8.RuneCountInString(field)
-			p.maxWidth = max(p.maxWidth, n)
+			p.maxWidth[f] = max(p.maxWidth[f], n)
 		}
 		res = append(res, record)
 	}
@@ -239,14 +241,21 @@ func (p *Pager) getPrintableLines(lines [][]string) []string {
 }
 
 func (p *Pager) renderCSVWindow() {
-	p.clearTerm()
+	p.cursorTopLeftTerm()
 	lines := p.readLines()
 	printableLines := p.getPrintableLines(lines)
+	if p.prevPrintableLines == nil ||
+		len(printableLines) != len(p.prevPrintableLines) ||
+		(len(printableLines) > 0 && len(printableLines[0]) != len(p.prevPrintableLines[0])) {
+		p.clearTerm()
+	}
+	p.prevPrintableLines = printableLines
 	fmt.Print(strings.Join(printableLines, "\n"))
 }
 
-func (p *Pager) getTableLine(nfields int, start, middle, end string) string {
+func (p *Pager) getTableLine(start, middle, end string) string {
 	var builder strings.Builder
+	j := 0
 	length := p.countMaxJoinedLength()
 	for i := 0; i < length; i++ {
 		s := ""
@@ -255,8 +264,9 @@ func (p *Pager) getTableLine(nfields int, start, middle, end string) string {
 			s = start
 		case i == length-1:
 			s = end
-		case i%(p.maxWidth+1) == 0:
+		case sum(p.maxWidth[0:j+1])+(j+1) == i:
 			s = middle
+			j++
 		default:
 			s = "━"
 		}
@@ -266,29 +276,33 @@ func (p *Pager) getTableLine(nfields int, start, middle, end string) string {
 }
 
 func (p *Pager) getTableHeaderLine() string {
-	return p.getTableLine(p.maxFields, "┏", "┳", "┓")
+	return p.getTableLine("┏", "┳", "┓")
 }
 
 func (p *Pager) getTableFooterLine() string {
-	return p.getTableLine(p.maxFields, "┗", "┻", "┛")
+	return p.getTableLine("┗", "┻", "┛")
 }
 
 func (p *Pager) getDataLine() string {
-	return p.getTableLine(p.maxFields, "┣", "╋", "┫")
+	return p.getTableLine("┣", "╋", "┫")
 }
 
 func (p *Pager) getDataFields(line []string) string {
 	var builder strings.Builder
 	builder.WriteString("┃")
-	for _, field := range line {
-		builder.WriteString(p.padString(field, p.maxWidth))
+	for i, field := range line {
+		builder.WriteString(p.padString(field, p.maxWidth[i]))
 		builder.WriteString("┃")
 	}
 	return builder.String()
 }
 
 func (p *Pager) countMaxJoinedLength() int {
-	return (p.maxWidth+1)*p.maxFields + 1
+	res := 0
+	for _, w := range p.maxWidth {
+		res += w + 1
+	}
+	return res + 1
 }
 
 func (p *Pager) countLinesFitting() int {
@@ -297,7 +311,12 @@ func (p *Pager) countLinesFitting() int {
 }
 
 func (p *Pager) moveToLeft() {
-	p.horizontalShift = max(p.horizontalShift-p.maxWidth-1, 0)
+	i := p.currentFieldIndex()
+	if i == 0 {
+		p.horizontalShift = 0
+		return
+	}
+	p.horizontalShift = max(0, p.horizontalShift-p.maxWidth[i-1]-1)
 }
 
 func (p *Pager) moveToRight() {
@@ -306,7 +325,25 @@ func (p *Pager) moveToRight() {
 	if length-p.horizontalShift <= width {
 		return
 	}
-	p.horizontalShift = p.horizontalShift + p.maxWidth + 1
+	i := p.currentFieldIndex()
+	p.horizontalShift = p.horizontalShift + p.maxWidth[i] + 1
+}
+
+func (p *Pager) currentFieldIndex() int {
+	i := 0
+	cum := 0
+	for _, w := range p.maxWidth {
+		if p.horizontalShift-i >= cum && p.horizontalShift-i < cum+w {
+			return i
+		}
+		cum += w
+		i++
+	}
+
+	if p.horizontalShift == cum {
+		return len(p.maxWidth) - 1
+	}
+	return 0
 }
 
 func (p *Pager) padString(input string, length int) string {
@@ -406,6 +443,10 @@ func (p *Pager) seekEnd() {
 	}
 }
 
+func (p *Pager) cursorTopLeftTerm() {
+	fmt.Print("\033[H")
+}
+
 func (p *Pager) clearTerm() {
 	fmt.Print("\033[H\033[2J")
 }
@@ -435,6 +476,14 @@ func (p *Pager) clearLastScreenLine() {
 }
 
 // util
+
+func sum(ns []int) int {
+	res := 0
+	for _, n := range ns {
+		res += n
+	}
+	return res
+}
 
 func getNewCSVReader(file *os.File) *csv.Reader {
 	reader := csv.NewReader(file)
