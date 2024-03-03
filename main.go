@@ -33,7 +33,6 @@ var (
 
 type Pager struct {
 	sync.Mutex
-	currentOffset      int64
 	horizontalShift    int
 	maxWidth           []int
 	file               *os.File
@@ -186,7 +185,6 @@ func (p *Pager) readLines() [][]string {
 	res := [][]string{}
 	s, err := p.file.Seek(0, io.SeekCurrent)
 	fatalIfErr(err)
-	p.currentOffset = s
 	reader := getNewCSVReader(p.file)
 	for i := 0; i < p.countLinesFitting(); i++ {
 		record, err := reader.Read()
@@ -205,7 +203,7 @@ func (p *Pager) readLines() [][]string {
 		}
 		res = append(res, record)
 	}
-	_, err = p.file.Seek(p.currentOffset, io.SeekStart)
+	_, err = p.file.Seek(s, io.SeekStart)
 	fatalIfErr(err)
 	return res
 }
@@ -366,7 +364,6 @@ func (p *Pager) seekBackLine() int64 {
 		if res <= 0 {
 			_, err = p.file.Seek(0, io.SeekStart)
 			fatalIfErr(err)
-			p.currentOffset = 0
 			return 0
 		}
 		_, err = p.file.ReadAt(b, res)
@@ -381,7 +378,6 @@ func (p *Pager) seekBackLine() int64 {
 			res++
 			_, err = p.file.Seek(res, io.SeekStart)
 			fatalIfErr(err)
-			p.currentOffset = res
 			return res
 		}
 		res--
@@ -389,7 +385,7 @@ func (p *Pager) seekBackLine() int64 {
 }
 
 func (p *Pager) seekForwardLine() int64 {
-	res, err := p.file.Seek(p.currentOffset, io.SeekStart)
+	res, err := p.file.Seek(0, io.SeekCurrent)
 	fatalIfErr(err)
 	b := make([]byte, 1)
 	enteredNL := false
@@ -399,7 +395,6 @@ func (p *Pager) seekForwardLine() int64 {
 			if err == io.EOF {
 				res, err = p.file.Seek(0, io.SeekEnd)
 				fatalIfErr(err)
-				p.currentOffset = res
 				return res
 			}
 			fatalIfErr(err)
@@ -410,7 +405,6 @@ func (p *Pager) seekForwardLine() int64 {
 		} else if b[0] != '\n' && enteredNL {
 			_, err := p.file.Seek(res, io.SeekStart)
 			fatalIfErr(err)
-			p.currentOffset = res
 			return res
 		}
 		res++
@@ -432,7 +426,6 @@ func (p *Pager) seekBackwardN(n int) {
 func (p *Pager) seekStart() {
 	_, err := p.file.Seek(0, io.SeekStart)
 	fatalIfErr(err)
-	p.currentOffset = 0
 }
 
 func (p *Pager) seekEnd() {
