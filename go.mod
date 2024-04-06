@@ -1,6 +1,6 @@
 module github.com/fioriandrea/csv-peek
 
-go 1.21.4
+go 1.19
 
 require (
 	github.com/eiannone/keyboard v0.0.0-20220611211555-0d226195f203

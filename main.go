@@ -111,9 +111,9 @@ outerLoop:
 		} else {
 			switch key {
 			case keyboard.KeyArrowUp:
-				pager.seekBackLine()
+				pager.seekBackwardN(1)
 			case keyboard.KeyArrowDown:
-				pager.seekForwardLine()
+				pager.seekForwardN(1)
 			case keyboard.KeyArrowLeft:
 				pager.moveToLeft()
 			case keyboard.KeyArrowRight:
@@ -129,9 +129,9 @@ outerLoop:
 			}
 			switch ch {
 			case 'j':
-				pager.seekForwardLine()
+				pager.seekForwardN(1)
 			case 'k':
-				pager.seekBackLine()
+				pager.seekBackwardN(1)
 			case 'l':
 				pager.moveToRight()
 			case 'h':
@@ -184,6 +184,10 @@ func handleLineJump(digit rune) {
 func (p *Pager) readLines() [][]string {
 	res := [][]string{}
 	s, err := p.file.Seek(0, io.SeekCurrent)
+	defer func() {
+		_, err = p.file.Seek(s, io.SeekStart)
+		fatalIfErr(err)
+	}()
 	fatalIfErr(err)
 	reader := getNewCSVReader(p.file)
 	for i := 0; i < p.countLinesFitting(); i++ {
@@ -203,8 +207,6 @@ func (p *Pager) readLines() [][]string {
 		}
 		res = append(res, record)
 	}
-	_, err = p.file.Seek(s, io.SeekStart)
-	fatalIfErr(err)
 	return res
 }
 
@@ -411,9 +413,33 @@ func (p *Pager) seekForwardLine() int64 {
 	}
 }
 
+func (p *Pager) countLinesAvailable() int {
+	s, err := p.file.Seek(0, io.SeekCurrent)
+	fatalIfErr(err)
+	defer func() {
+		_, err = p.file.Seek(s, io.SeekStart)
+		fatalIfErr(err)
+	}()
+	reader := getNewCSVReader(p.file)
+	for i := 0; i < p.countLinesFitting(); i++ {
+		_, err := reader.Read()
+		if err != nil {
+			if err == io.EOF {
+				return i
+			}
+			log.Fatalln(err)
+		}
+	}
+	return p.countLinesFitting()
+}
+
 func (p *Pager) seekForwardN(n int) {
+	lines := p.countLinesAvailable()
 	for i := 0; i < n; i++ {
 		p.seekForwardLine()
+	}
+	for p.countLinesAvailable() < lines {
+		p.seekBackLine()
 	}
 }
 
@@ -476,6 +502,20 @@ func sum(ns []int) int {
 		res += n
 	}
 	return res
+}
+
+func min(x, y int) int {
+    if x < y {
+        return x
+    }
+    return y
+}
+
+func max(x, y int) int {
+    if x > y {
+        return x
+    }
+    return y
 }
 
 func getNewCSVReader(file *os.File) *csv.Reader {
